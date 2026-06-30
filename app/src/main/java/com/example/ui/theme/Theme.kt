@@ -23,13 +23,26 @@ private val DarkColorScheme = darkColorScheme(
     onSurface = AuraTextPrimary
 )
 
+private val LightColorScheme = lightColorScheme(
+    primary = AuraLightAccentViolet,
+    secondary = AuraLightAccentPink,
+    tertiary = AuraLightAccentCyan,
+    background = AuraLightBackground,
+    surface = AuraLightCardBackground,
+    onPrimary = AuraLightTextPrimary,
+    onSecondary = AuraLightTextPrimary,
+    onTertiary = AuraLightBackground,
+    onBackground = AuraLightTextPrimary,
+    onSurface = AuraLightTextPrimary
+)
+
 @Composable
 fun MyApplicationTheme(
-    darkTheme: Boolean = true, // Force dark theme to match the image concept
-    dynamicColor: Boolean = false, // Disable dynamic colors to preserve visual branding
+    darkTheme: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = DarkColorScheme
+    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
     MaterialTheme(
         colorScheme = colorScheme,

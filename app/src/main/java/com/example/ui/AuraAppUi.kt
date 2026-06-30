@@ -12,6 +12,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -486,6 +489,147 @@ fun AuthScreen(
 }
 
 // ==========================================
+// TYPING INDICATOR & DISCOVER TILES FROM DESIGN SPEC
+// ==========================================
+@Composable
+fun TypingIndicator() {
+    val infiniteTransition = rememberInfiniteTransition(label = "Typing")
+    
+    @Composable
+    fun BouncingDot(delay: Int) {
+        val bounce by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = -12f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(600, delayMillis = delay, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "Bounce"
+        )
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .graphicsLayer(translationY = bounce)
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), CircleShape)
+        )
+    }
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .padding(vertical = 12.dp, horizontal = 16.dp)
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        BouncingDot(delay = 0)
+        BouncingDot(delay = 150)
+        BouncingDot(delay = 300)
+    }
+}
+
+@Composable
+fun DiscoverView(viewModel: AuraViewModel) {
+    val context = LocalContext.current
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+    ) {
+        Text(
+            text = "Discover",
+            fontSize = 32.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onBackground,
+            letterSpacing = (-1).sp
+        )
+        
+        Spacer(modifier = Modifier.height(20.dp))
+        
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                DiscoverCard(
+                    title = "Trending Prompts",
+                    brush = Brush.linearGradient(colors = listOf(Color(0xFFFF9A9E), Color(0xFFFECFEF))),
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        viewModel.stopVoiceRecording("What are some trending AI prompt patterns?")
+                        Toast.makeText(context, "Initiated: Trending Prompts", Toast.LENGTH_SHORT).show()
+                    }
+                )
+                DiscoverCard(
+                    title = "Learn a Language",
+                    brush = Brush.linearGradient(colors = listOf(Color(0xFFA1C4FD), Color(0xFFC2E9FB))),
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        viewModel.stopVoiceRecording("Can we practice speaking conversational Spanish?")
+                        Toast.makeText(context, "Initiated: Language Practice", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                DiscoverCard(
+                    title = "Interview Prep",
+                    brush = Brush.linearGradient(colors = listOf(Color(0xFFD4FC79), Color(0xFF96E6A1))),
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        viewModel.stopVoiceRecording("Can you run a mock Android developer interview with me?")
+                        Toast.makeText(context, "Initiated: Interview Preparation", Toast.LENGTH_SHORT).show()
+                    }
+                )
+                DiscoverCard(
+                    title = "Write a Song",
+                    brush = Brush.linearGradient(colors = listOf(Color(0xFFE0C3FC), Color(0xFF8EC5FC))),
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        viewModel.stopVoiceRecording("Write a catchy verse and chorus for a synthwave pop song about Aura.")
+                        Toast.makeText(context, "Initiated: Songwriting", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun DiscoverCard(
+    title: String,
+    brush: Brush,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = modifier
+            .height(140.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(brush)
+                .padding(20.dp),
+            contentAlignment = Alignment.BottomStart
+        ) {
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black
+            )
+        }
+    }
+}
+
+// ==========================================
+// ==========================================
 // 3. MAIN APP SCREEN (WITH BOTH VOICE & CHAT)
 // ==========================================
 @Composable
@@ -497,10 +641,14 @@ fun MainScreen(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val context = LocalContext.current
 
-    // Active View Mode inside Main: "voice" or "traditional"
+    // Active View Mode inside Main: "voice", "discover", or "chat"
     var activeTab by remember { mutableStateOf("voice") }
+    var textInput by remember { mutableStateOf("") }
+    
+    val voiceState by viewModel.voiceState.collectAsState()
+    val isDarkTheme by viewModel.isDarkTheme.collectAsState()
 
-    // Navigation and Permissions
+    // Permissions Helper
     val recordAudioLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -516,12 +664,12 @@ fun MainScreen(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet(
-                drawerContainerColor = Color(0xFF0B0418),
+                drawerContainerColor = MaterialTheme.colorScheme.background,
                 drawerTonalElevation = 8.dp,
                 modifier = Modifier
                     .width(310.dp)
                     .fillMaxHeight()
-                    .border(1.dp, Color(0xFF221538), RoundedCornerShape(0.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), RoundedCornerShape(0.dp))
             ) {
                 AuraSidebarContent(
                     viewModel = viewModel,
@@ -531,42 +679,314 @@ fun MainScreen(
             }
         }
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(AuraBackground)
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Dynamic Top Bar matching the images exactly
-                AuraTopBar(
-                    activeTab = activeTab,
-                    viewModel = viewModel,
-                    onMenuClick = { coroutineScope.launch { drawerState.open() } },
-                    onTabToggle = { tab -> activeTab = tab }
-                )
-
-                // Render Active Content (Voice or traditional Chat)
-                Box(
+        Scaffold(
+            bottomBar = {
+                // Unified Glassmorphic Bottom Sheet wrapping input elements and navigation
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                    shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+                    tonalElevation = 8.dp,
                     modifier = Modifier
-                        .weight(1f)
                         .fillMaxWidth()
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
+                            RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
+                        )
                 ) {
-                    if (activeTab == "voice") {
-                        VoiceChatView(
-                            viewModel = viewModel,
-                            onRequestPermission = {
-                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                                    viewModel.startVoiceRecording()
-                                } else {
-                                    recordAudioLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                    ) {
+                        // 1. Dynamic Input Area (hides on Discover tab)
+                        if (activeTab != "discover") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                if (activeTab == "voice") {
+                                    // Voice State Display and Mic Trigger
+                                    Row(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable {
+                                                if (voiceState == VoiceState.IDLE) {
+                                                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                                        viewModel.startVoiceRecording()
+                                                    } else {
+                                                        recordAudioLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                                    }
+                                                }
+                                            },
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Mic,
+                                            contentDescription = "Voice Mode",
+                                            tint = if (voiceState != VoiceState.IDLE) AuraAccentPink else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = when (voiceState) {
+                                                VoiceState.LISTENING -> "Listening..."
+                                                VoiceState.THINKING -> "Thinking..."
+                                                VoiceState.SPEAKING -> "Speaking..."
+                                                else -> "Talk or type..."
+                                            },
+                                            color = if (voiceState != VoiceState.IDLE) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+
+                                    // RED STOP BUTTON with equalizer bars (Waveform) matching the design spec
+                                    if (voiceState != VoiceState.IDLE) {
+                                        Button(
+                                            onClick = {
+                                                viewModel.stopPlayback()
+                                                viewModel.stopVoiceRecording()
+                                            },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color(0xFFFFE8EB),
+                                                contentColor = Color(0xFFDA283F)
+                                            ),
+                                            shape = RoundedCornerShape(20.dp),
+                                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                                            modifier = Modifier.height(36.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                // 3 small vertical Equalizer waves
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                                    modifier = Modifier.height(12.dp)
+                                                ) {
+                                                    val infiniteTransition = rememberInfiniteTransition(label = "EqWave")
+                                                    val waveHeight1 by infiniteTransition.animateFloat(
+                                                        initialValue = 4f, targetValue = 12f,
+                                                        animationSpec = infiniteRepeatable(tween(400, easing = LinearEasing), RepeatMode.Reverse),
+                                                        label = "W1"
+                                                    )
+                                                    val waveHeight2 by infiniteTransition.animateFloat(
+                                                        initialValue = 10f, targetValue = 4f,
+                                                        animationSpec = infiniteRepeatable(tween(350, easing = LinearEasing), RepeatMode.Reverse),
+                                                        label = "W2"
+                                                    )
+                                                    val waveHeight3 by infiniteTransition.animateFloat(
+                                                        initialValue = 5f, targetValue = 11f,
+                                                        animationSpec = infiniteRepeatable(tween(450, easing = LinearEasing), RepeatMode.Reverse),
+                                                        label = "W3"
+                                                    )
+                                                    Box(modifier = Modifier.width(2.dp).height(waveHeight1.dp).background(Color(0xFFDA283F), RoundedCornerShape(1.dp)))
+                                                    Box(modifier = Modifier.width(2.dp).height(waveHeight2.dp).background(Color(0xFFDA283F), RoundedCornerShape(1.dp)))
+                                                    Box(modifier = Modifier.width(2.dp).height(waveHeight3.dp).background(Color(0xFFDA283F), RoundedCornerShape(1.dp)))
+                                                }
+                                                Text(
+                                                    text = "Stop",
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else if (activeTab == "chat") {
+                                    // Text Mode input bar with Send Actions
+                                    TextField(
+                                        value = textInput,
+                                        onValueChange = { textInput = it },
+                                        placeholder = { Text("Talk or type...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)) },
+                                        colors = TextFieldDefaults.colors(
+                                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                            focusedContainerColor = Color.Transparent,
+                                            unfocusedContainerColor = Color.Transparent,
+                                            focusedIndicatorColor = Color.Transparent,
+                                            unfocusedIndicatorColor = Color.Transparent
+                                        ),
+                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                                        keyboardActions = KeyboardActions(onSend = {
+                                            if (textInput.isNotBlank()) {
+                                                viewModel.sendTextMessage(textInput)
+                                                textInput = ""
+                                            }
+                                        }),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("chat_text_input")
+                                    )
+
+                                    IconButton(
+                                        onClick = {
+                                            if (textInput.isNotBlank()) {
+                                                viewModel.sendTextMessage(textInput)
+                                                textInput = ""
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .background(
+                                                if (textInput.isNotBlank()) AuraAccentPink else MaterialTheme.colorScheme.surfaceVariant,
+                                                CircleShape
+                                            )
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Send,
+                                            contentDescription = "Send Message",
+                                            tint = if (textInput.isNotBlank()) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
-                        )
-                    } else {
-                        TraditionalChatView(viewModel = viewModel)
+                            
+                            Divider(
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
+                                modifier = Modifier.padding(horizontal = 24.dp)
+                            )
+                        }
+
+                        // 2. Beautiful Bottom Navigation Tabs
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // 1. Home tab (Mic icon)
+                            BottomNavItem(
+                                icon = Icons.Default.Home,
+                                label = "Home",
+                                isActive = activeTab == "voice",
+                                onClick = { activeTab = "voice" }
+                            )
+
+                            // 2. Discover tab (Explore icon)
+                            BottomNavItem(
+                                icon = Icons.Default.Explore,
+                                label = "Discover",
+                                isActive = activeTab == "discover",
+                                onClick = { activeTab = "discover" }
+                            )
+
+                            // 3. Chat tab (Chat icon)
+                            BottomNavItem(
+                                icon = Icons.Default.Chat,
+                                label = "Chat",
+                                isActive = activeTab == "chat",
+                                onClick = { activeTab = "chat" }
+                            )
+
+                            // 4. Spaces tab (Drawer trigger)
+                            BottomNavItem(
+                                icon = Icons.Default.FolderOpen,
+                                label = "Spaces",
+                                isActive = drawerState.isOpen,
+                                onClick = {
+                                    coroutineScope.launch {
+                                        if (drawerState.isClosed) drawerState.open() else drawerState.close()
+                                    }
+                                }
+                            )
+
+                            // 5. Theme Toggle tab (Sun/Moon Settings icon)
+                            BottomNavItem(
+                                icon = if (isDarkTheme) Icons.Default.NightsStay else Icons.Default.WbSunny,
+                                label = "Theme",
+                                isActive = false,
+                                onClick = {
+                                    viewModel.toggleTheme()
+                                    Toast.makeText(context, "Display Mode toggled.", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
                     }
                 }
             }
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(innerPadding)
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Dynamic Theme-Responsive Top Bar
+                    AuraTopBar(
+                        viewModel = viewModel,
+                        onMenuClick = { coroutineScope.launch { drawerState.open() } }
+                    )
+
+                    // Main View Switcher
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        Crossfade(targetState = activeTab, label = "TabCrossfade") { tab ->
+                            when (tab) {
+                                "voice" -> VoiceChatView(
+                                    viewModel = viewModel,
+                                    onRequestPermission = {
+                                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                            viewModel.startVoiceRecording()
+                                        } else {
+                                            recordAudioLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                        }
+                                    }
+                                )
+                                "discover" -> DiscoverView(viewModel = viewModel)
+                                "chat" -> TraditionalChatView(viewModel = viewModel)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BottomNavItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    isActive: Boolean,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onClick() }
+            .padding(vertical = 6.dp, horizontal = 12.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            modifier = Modifier.size(26.dp)
+        )
+        
+        Spacer(modifier = Modifier.height(4.dp))
+        
+        // Dot indicator or subtle label
+        if (isActive) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+        } else {
+            Spacer(modifier = Modifier.height(6.dp))
         }
     }
 }
@@ -576,13 +996,12 @@ fun MainScreen(
 // ==========================================
 @Composable
 fun AuraTopBar(
-    activeTab: String,
     viewModel: AuraViewModel,
-    onMenuClick: () -> Unit,
-    onTabToggle: (String) -> Unit
+    onMenuClick: () -> Unit
 ) {
     val selectedModel by viewModel.selectedModel.collectAsState()
     val isMuted by viewModel.isMuted.collectAsState()
+    val isDarkTheme by viewModel.isDarkTheme.collectAsState()
     var dropdownExpanded by remember { mutableStateOf(false) }
 
     Row(
@@ -593,34 +1012,52 @@ fun AuraTopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Left Action (Drawer Menu trigger or switch)
-        IconButton(
-            onClick = onMenuClick,
-            modifier = Modifier
-                .background(Color(0xFF140B23), CircleShape)
-                .border(1.dp, Color(0xFF291B3D), CircleShape)
+        // Left Actions: Drawer menu & Theme Toggle
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Menu,
-                contentDescription = "Menu Sidebar",
-                tint = AuraTextPrimary
-            )
+            IconButton(
+                onClick = onMenuClick,
+                modifier = Modifier
+                    .background(MaterialTheme.colorScheme.surface, CircleShape)
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), CircleShape)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Menu,
+                    contentDescription = "Menu Sidebar",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            IconButton(
+                onClick = { viewModel.toggleTheme() },
+                modifier = Modifier
+                    .background(MaterialTheme.colorScheme.surface, CircleShape)
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), CircleShape)
+            ) {
+                Icon(
+                    imageVector = if (isDarkTheme) Icons.Default.WbSunny else Icons.Default.NightsStay,
+                    contentDescription = "Theme Toggle",
+                    tint = if (isDarkTheme) AuraAccentCyan else AuraAccentPink
+                )
+            }
         }
 
-        // Center Model Version Dropdown (Pill style matching "Aura 1.2 BETA v" exactly!)
+        // Center Model Version Dropdown
         Box(contentAlignment = Alignment.TopCenter) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFF140B23))
-                    .border(1.dp, Color(0xFF291B3D), RoundedCornerShape(20.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), RoundedCornerShape(20.dp))
                     .clickable { dropdownExpanded = true }
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Text(
                     text = selectedModel,
-                    color = AuraTextPrimary,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.5.sp
@@ -639,7 +1076,7 @@ fun AuraTopBar(
                 Icon(
                     imageVector = Icons.Default.ArrowDropDown,
                     contentDescription = "Select Model",
-                    tint = AuraTextPrimary,
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -647,10 +1084,10 @@ fun AuraTopBar(
             DropdownMenu(
                 expanded = dropdownExpanded,
                 onDismissRequest = { dropdownExpanded = false },
-                modifier = Modifier.background(Color(0xFF140B23))
+                modifier = Modifier.background(MaterialTheme.colorScheme.surface)
             ) {
                 DropdownMenuItem(
-                    text = { Text("Aura 1.2 BETA", color = AuraTextPrimary) },
+                    text = { Text("Aura 1.2 BETA", color = MaterialTheme.colorScheme.onSurface) },
                     onClick = {
                         viewModel.setModel("Aura 1.2 BETA")
                         dropdownExpanded = false
@@ -666,13 +1103,16 @@ fun AuraTopBar(
             }
         }
 
-        // Right View switchers & Playback state indicators
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // Right Actions: Volume/Mute & Profile Avatar with border gradient
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             IconButton(
                 onClick = { viewModel.toggleMute() },
                 modifier = Modifier
-                    .background(Color(0xFF140B23), CircleShape)
-                    .border(1.dp, Color(0xFF291B3D), CircleShape)
+                    .background(MaterialTheme.colorScheme.surface, CircleShape)
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), CircleShape)
             ) {
                 Icon(
                     imageVector = if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
@@ -680,21 +1120,31 @@ fun AuraTopBar(
                     tint = if (isMuted) AuraAccentPink else AuraAccentCyan
                 )
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            // View Swapping Trigger pill (Grid toggle)
-            IconButton(
-                onClick = {
-                    val nextTab = if (activeTab == "voice") "traditional" else "voice"
-                    onTabToggle(nextTab)
-                },
+
+            // Initials Avatar with dynamic borders
+            val currentUser by viewModel.currentUser.collectAsState()
+            val initials = currentUser?.displayName?.take(1)?.uppercase() ?: "A"
+
+            Box(
                 modifier = Modifier
-                    .background(Color(0xFF140B23), CircleShape)
-                    .border(1.dp, Color(0xFF291B3D), CircleShape)
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(AuraAccentPink, AuraAccentViolet, AuraAccentCyan)
+                        )
+                    )
+                    .padding(2.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .clickable { onMenuClick() },
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = if (activeTab == "voice") Icons.Default.Chat else Icons.Default.GridView,
-                    contentDescription = "Toggle Mode",
-                    tint = AuraAccentPink
+                Text(
+                    text = initials,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
                 )
             }
         }
@@ -712,7 +1162,10 @@ fun VoiceChatView(
     val voiceState by viewModel.voiceState.collectAsState()
     val transcript by viewModel.voiceTranscript.collectAsState()
     val subtext by viewModel.voiceSubtext.collectAsState()
-    val isMuted by viewModel.isMuted.collectAsState()
+
+    // Check if we are showing default/empty state to display suggestions
+    val showSuggestions = (voiceState == VoiceState.IDLE && 
+            (transcript == "Tap the mic below to begin speaking with Aura." || transcript.isBlank()))
 
     // Breathing / Pulse animation for glowing orb
     val infiniteTransition = rememberInfiniteTransition(label = "OrbPulse")
@@ -726,16 +1179,6 @@ fun VoiceChatView(
         label = "ScaleAnimation"
     )
 
-    val waveOffset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "GlowOffset"
-    )
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -743,23 +1186,33 @@ fun VoiceChatView(
         verticalArrangement = Arrangement.SpaceBetween,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Beautiful Pulsing Orb Asset wrapped in custom glowing borders
+        // Centered Glowing Orb Asset with a beautiful halo
         Box(
             modifier = Modifier
-                .weight(1.2f)
+                .weight(1.1f)
                 .fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
-            // Gradient Aura glow behind the orb
+            // Halo glow behind the orb that animates scale and changes color based on active state
+            val haloGlowColor = if (voiceState == VoiceState.LISTENING) {
+                AuraAccentPink
+            } else if (voiceState == VoiceState.THINKING) {
+                AuraAccentCyan
+            } else if (voiceState == VoiceState.SPEAKING) {
+                AuraAccentViolet
+            } else {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+            }
+            
             Box(
                 modifier = Modifier
-                    .size(240.dp)
+                    .size(210.dp)
                     .scale(pulseScale)
                     .shadow(
                         elevation = if (voiceState != VoiceState.IDLE) 32.dp else 16.dp,
                         shape = CircleShape,
-                        ambientColor = AuraAccentViolet,
-                        spotColor = AuraAccentPink
+                        ambientColor = haloGlowColor,
+                        spotColor = haloGlowColor
                     )
                     .clip(CircleShape)
                     .border(
@@ -781,107 +1234,147 @@ fun VoiceChatView(
             }
         }
 
-        // Transcribed content displaying user hokku and Aura responses beautifully
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Crossfade(targetState = transcript, label = "TranscriptCrossfade") { text ->
-                Text(
-                    text = text,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Medium,
-                    fontStyle = FontStyle.Italic,
-                    lineHeight = 32.sp,
-                    fontFamily = FontFamily.SansSerif,
-                    color = AuraTextPrimary,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .padding(horizontal = 8.dp)
-                        .testTag("voice_transcript_text")
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Text(
-                text = subtext,
-                fontSize = 11.sp,
-                color = AuraAccentCyan,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.5.sp,
-                modifier = Modifier.testTag("voice_status_indicator")
-            )
-        }
-
-        // Large Pulsing microphone action block (Screen 3)
+        // Midsection Content: Suggestions list OR Active Conversation bubbles
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
+                .weight(1.3f)
+                .fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                // Helper action status
-                Text(
-                    text = when (voiceState) {
-                        VoiceState.LISTENING -> "LISTENING"
-                        VoiceState.THINKING -> "THINKING"
-                        VoiceState.SPEAKING -> "SPEAKING"
-                        else -> "TAP MIC TO TALK"
-                    },
-                    fontSize = 11.sp,
-                    color = AuraTextSecondary,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 2.sp,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
+            if (showSuggestions) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Where should we start?",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                // Large microphone button with customizable interactive states
-                Box(
+                    // Suggestion Card 1
+                    SuggestionButton(
+                        text = "Let's get to know each other",
+                        onClick = { viewModel.stopVoiceRecording("Let's get to know each other") }
+                    )
+                    
+                    // Suggestion Card 2
+                    SuggestionButton(
+                        text = "Learn how to use AI",
+                        onClick = { viewModel.stopVoiceRecording("Learn how to use AI") }
+                    )
+
+                    // Suggestion Card 3
+                    SuggestionButton(
+                        text = "Talk about my goals",
+                        onClick = { viewModel.stopVoiceRecording("Talk about my goals") }
+                    )
+                }
+            } else {
+                // Display the active conversational response
+                Column(
                     modifier = Modifier
-                        .size(80.dp)
-                        .shadow(16.dp, CircleShape)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                colors = when (voiceState) {
-                                    VoiceState.LISTENING -> listOf(AuraAccentPink, Color.Red)
-                                    VoiceState.SPEAKING -> listOf(AuraAccentCyan, AuraAccentViolet)
-                                    VoiceState.THINKING -> listOf(Color.Yellow, AuraAccentPink)
-                                    else -> listOf(AuraAccentViolet, AuraAccentPink)
-                                }
-                            )
-                        )
-                        .clickable {
-                            if (voiceState == VoiceState.LISTENING) {
-                                viewModel.stopVoiceRecording()
-                            } else {
-                                onRequestPermission()
-                            }
-                        }
-                        .testTag("voice_recording_toggle_button"),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
                     if (voiceState == VoiceState.THINKING) {
-                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(36.dp))
+                        TypingIndicator()
                     } else {
-                        Icon(
-                            imageVector = when (voiceState) {
-                                VoiceState.LISTENING -> Icons.Default.Stop
-                                VoiceState.SPEAKING -> Icons.Default.Hearing
-                                else -> Icons.Default.Mic
-                            },
-                            contentDescription = "Trigger voice assistant",
-                            tint = Color.White,
-                            modifier = Modifier.size(36.dp)
-                        )
+                        // AI Transcript bubble with a premium gradient matching the design spec
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        Brush.linearGradient(
+                                            colors = listOf(AuraAccentViolet.copy(alpha = 0.85f), AuraAccentPink.copy(alpha = 0.85f))
+                                        )
+                                    )
+                                    .padding(20.dp)
+                            ) {
+                                Text(
+                                    text = transcript,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White,
+                                    lineHeight = 26.sp,
+                                    fontStyle = FontStyle.Normal,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("voice_transcript_text")
+                                )
+                            }
+                        }
                     }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = subtext,
+                        fontSize = 11.sp,
+                        color = AuraAccentCyan,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.5.sp,
+                        modifier = Modifier.testTag("voice_status_indicator")
+                    )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun SuggestionButton(
+    text: String,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f), RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Waveform equalizer logo
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier.height(16.dp)
+            ) {
+                Box(modifier = Modifier.width(3.dp).height(10.dp).background(AuraAccentCyan, CircleShape))
+                Box(modifier = Modifier.width(3.dp).height(16.dp).background(AuraAccentViolet, CircleShape))
+                Box(modifier = Modifier.width(3.dp).height(8.dp).background(AuraAccentPink, CircleShape))
+            }
+            
+            Text(
+                text = text,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }
@@ -892,125 +1385,41 @@ fun VoiceChatView(
 @Composable
 fun TraditionalChatView(viewModel: AuraViewModel) {
     val messages by viewModel.currentMessages.collectAsState()
-    var textInput by remember { mutableStateOf("") }
-    val voiceState by viewModel.voiceState.collectAsState()
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.SpaceBetween
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        // Message thread list
-        Box(modifier = Modifier.weight(1f)) {
-            if (messages.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.ChatBubbleOutline,
-                            contentDescription = "Empty Chat",
-                            tint = AuraTextSecondary,
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Begin conversing with Aura.",
-                            color = AuraTextSecondary,
-                            fontSize = 14.sp
-                        )
-                    }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(messages) { message ->
-                        AuraMessageBubble(message = message, onPlayVoice = { base64 ->
-                            viewModel.stopPlayback()
-                            AuraAudioHelper.playAudioFromBase64(viewModel.getApplication(), base64)
-                        })
-                    }
+        if (messages.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Default.ChatBubbleOutline,
+                        contentDescription = "Empty Chat",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Begin conversing with Aura.",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        fontSize = 14.sp
+                    )
                 }
             }
-        }
-
-        // Input Bar matching image 4 exactly with translucency and rounded outlines
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp, top = 8.dp)
-                .clip(RoundedCornerShape(26.dp))
-                .background(Color(0xFF140B23))
-                .border(1.dp, Color(0xFF2E2243), RoundedCornerShape(26.dp))
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Plus Icon action trigger
-            Icon(
-                imageVector = Icons.Default.AddCircleOutline,
-                contentDescription = "Expand attachment",
-                tint = AuraAccentCyan,
-                modifier = Modifier
-                    .size(24.dp)
-                    .clickable { /* Expand more options */ }
-            )
-            
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Message text input
-            TextField(
-                value = textInput,
-                onValueChange = { textInput = it },
-                placeholder = { Text("Enter Message", color = AuraTextSecondary, fontSize = 14.sp) },
-                colors = TextFieldDefaults.colors(
-                    focusedTextColor = AuraTextPrimary,
-                    unfocusedTextColor = AuraTextPrimary,
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = {
-                    if (textInput.isNotBlank()) {
-                        viewModel.sendTextMessage(textInput)
-                        textInput = ""
-                    }
-                }),
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("chat_text_input")
-            )
-
-            // Submit / Action micro icon (Dynamic send vs mic)
-            if (textInput.isBlank()) {
-                Icon(
-                    imageVector = Icons.Default.Mic,
-                    contentDescription = "Voice prompt",
-                    tint = AuraTextSecondary,
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clickable {
-                            // Easily trigger sandbox voice reply
-                            viewModel.stopVoiceRecording("Can you change my training schedule?")
-                        }
-                        .testTag("chat_mic_action")
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Default.Send,
-                    contentDescription = "Send text",
-                    tint = AuraAccentPink,
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clickable {
-                            viewModel.sendTextMessage(textInput)
-                            textInput = ""
-                        }
-                        .testTag("chat_send_button")
-                )
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 120.dp, top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(messages) { message ->
+                    AuraMessageBubble(message = message, onPlayVoice = { base64 ->
+                        viewModel.stopPlayback()
+                        AuraAudioHelper.playAudioFromBase64(viewModel.getApplication(), base64)
+                    })
+                }
             }
         }
     }

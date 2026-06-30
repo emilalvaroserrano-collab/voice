@@ -77,6 +77,14 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     private val _isMuted = MutableStateFlow(false)
     val isMuted: StateFlow<Boolean> = _isMuted
 
+    // Dark/Light Theme state
+    private val _isDarkTheme = MutableStateFlow(true)
+    val isDarkTheme: StateFlow<Boolean> = _isDarkTheme
+
+    fun toggleTheme() {
+        _isDarkTheme.value = !_isDarkTheme.value
+    }
+
     init {
         // Automatically create a default session if sessions are empty
         viewModelScope.launch {
