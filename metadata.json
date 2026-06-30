@@ -1,0 +1,6 @@
+{
+  "name": "Aura AI",
+  "description": "Aura AI Voice Assistant with Gemini Live audio conversational capabilities, onboarding, and auth.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
